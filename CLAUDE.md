@@ -6,8 +6,9 @@ A private personal advisor for one person, its owner (Munich, Bavaria). It learn
 
 - **Live since 2026-10-19** at https://salmon-grass-0ae222003.2.azurestaticapps.net. Until then MyButler lived inside 4Muses (repo `billgraham3000/4muses`, `/mybutler/`); it moved to this repo and the Azure resource group `myButler` on 2026-10-19 (owner decision).
 - **Sign-in:** only `OWNER_EMAIL` can get an emailed sign-in link; Face ID / passkeys can be added in Settings. Sessions last 180 days.
+- **Handover:** start with `docs/handover.md` (state on 2026-10-19 and open threads).
 - **Waiting on the owner:**
-  - `ANTHROPIC-API-KEY` in the key vault (Claude is off until then);
+  - ~~`ANTHROPIC-API-KEY`~~ added 2026-10-19;
   - later `TICKETMASTER-API-KEY` for events.
 - **Phase 1 is done:** chat, profile, people, goals, routines and calendar, chores, the twice-daily look, feedback, the What I know page, export and delete.
 - **Next:**
