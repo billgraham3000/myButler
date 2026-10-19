@@ -40,7 +40,7 @@ export function profileText(c) {
   const name = (id) => c.routines.routines.find((r) => r.id === id)?.title || id;
   out.push('FACTS', ...c.profile.facts.map((f) => `- [${f.id}] ${f.kind === 'inferred' ? `inferred ${f.confidence}${f.confirmed ? '' : ', not yet confirmed'}` : 'stated'} · ${f.topic}: ${f.text}`));
   if (c.profile.summary) out.push('SUMMARY', c.profile.summary);
-  out.push('PEOPLE', ...c.people.map((p) => `- [${p.id}] ${p.name}${p.relation ? ` (${p.relation})` : ''}: ${line([p.birthday && `birthday ${p.birthday}`, p.interests?.length && `interests ${p.interests.join(', ')}`, p.ideas?.length && `ideas ${p.ideas.join(', ')}`, p.notes])}`));
+  out.push('PEOPLE', ...c.people.map((p) => `- [${p.id}] ${p.name}${p.relation ? ` (${p.relation})` : ''}: ${line([p.birthday && `birthday ${p.birthday}`, p.interests?.length && `interests ${p.interests.join(', ')}`, p.ideas?.length && `ideas ${p.ideas.join(', ')}`, p.address && `address ${p.address}`, p.notes])}`));
   out.push('ROUTINES', ...c.routines.routines.map((r) => `- [${r.id}] ${cal.describeRoutine(r)}${r.outdoor ? ', outdoor' : ''}${r.place ? `, at ${r.place}` : ''}${r.onHoliday === 'keep' ? ', also on holidays' : ''}`));
   if (c.routines.exceptions.length) out.push('EXCEPTIONS', ...c.routines.exceptions.map((x) => `- [${x.id}] ${name(x.routine)} ${x.from}${x.until ? `–${x.until}` : ''}: ${x.skip ? 'skipped' : x.moveTo ? `moved to ${x.moveTo}` : `${x.start || ''}–${x.end || ''}`}`));
   if (c.routines.periods.length) out.push('PERIODS', ...c.routines.periods.map((p) => `- [${p.id}] ${p.title} (${p.kind}) ${p.from}–${p.until}, pauses ${p.pauses === 'all' ? 'all' : p.pauses.map(name).join(', ') || 'nothing'}`));
@@ -119,7 +119,7 @@ const STATE_NAMES = cal.STATES;
 function system(now, settings) {
   const day = { mo: 'Monday', tu: 'Tuesday', we: 'Wednesday', th: 'Thursday', fr: 'Friday', sa: 'Saturday', su: 'Sunday' }[cal.weekday(now.date)];
   return `You are MyButler, the private personal advisor of one person, the owner. You get to know them (tastes, friends and relatives, hobbies, their normal week) and help them plan: events worth going to, birthdays, chores, free weekends, the weather.
-Now: ${day} ${now.date}, ${now.time} (${settings.tz}). Home: ${settings.home?.name || 'Munich'}, ${STATE_NAMES[settings.state] || 'Bavaria'}, Germany.
+Now: ${day} ${now.date}, ${now.time} (${settings.tz}). Home: ${settings.home?.name || 'Munich'}, ${STATE_NAMES[settings.state] || 'Bavaria'}, Germany.${settings.address ? ` Home address: ${settings.address}.` : ''}
 
 How to work:
 - Answer in the language the owner wrote in: German, English, or the same mix. Be brief and warm. Use short lists for several items.
@@ -127,7 +127,7 @@ How to work:
 - Routines, exceptions and periods: call the propose_* tool, then read its readback to the owner in plain words and ask whether it is right. Only after the owner says yes in a later message call confirm_proposal. If they correct it, drop the old one (confirm_proposal with answer "no") and propose again.
 - One-off appointments, and plans the owner accepts: add_event straight away.
 - Goals and dreams: save them with add_goal (not add_fact), with concrete steps when the owner names them. Progress the owner mentions → update_goal with a note; a finished step → complete_goal_step. When a goal's check-in is due (see the reminders), ask how it is going, briefly. If FACTS hold goals or dreams from before the goals list existed, offer once to move them (add_goal, then delete_fact).
-- People: keep only what helps the advice (relationship, birthday, interests, gift ideas). No addresses, phone numbers or emails.
+- People: keep what helps the advice (relationship, birthday, interests, gift ideas, and addresses, which help plan visits and trips). No phone numbers or emails. The owner's own address goes in set_home_address.
 - Never invent events, dates, times, prices or opening hours. Get them from search_events or web search and give the link for each. If you can't confirm a date, say so.
 - Never suggest anything over a fixed plan. Flexible routines may be moved or skipped.
 - Dates are YYYY-MM-DD and times HH:MM (24 h) on the owner's clock. Ids are in [brackets] below; use them with the tools.

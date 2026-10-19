@@ -142,9 +142,14 @@ eq((await mstore.read(pid, 'profile')).data.facts[1].text.length, 400, 'long fac
 r = await run('add_fact', { text: 'Seems to like Saturday hikes', kind: 'inferred', confidence: 3 });
 eq((await mstore.read(pid, 'profile')).data.facts[2].confidence, 1, 'confidence capped at 1');
 eq((await mstore.read(pid, 'profile')).data.facts[2].confirmed, false, 'inferred facts start unconfirmed');
-r = await run('add_person', { name: 'Mom', relation: 'mother', birthday: '1950-10-28', interests: ['pottery', 'gardening'], phone: '+49 123' });
+r = await run('add_person', { name: 'Mom', relation: 'mother', birthday: '1950-10-28', interests: ['pottery', 'gardening'], phone: '+49 123', address: 'Hauptstr. 1, Augsburg' });
 eq(r.ok, true, 'person saved');
-eq('phone' in (await mstore.read(pid, 'people')).data.people[0], false, 'contact details are not kept');
+eq('phone' in (await mstore.read(pid, 'people')).data.people[0], false, 'phone numbers are not kept');
+eq((await mstore.read(pid, 'people')).data.people[0].address, 'Hauptstr. 1, Augsburg', 'addresses are kept');
+eq((await run('set_home_address', { address: 'Leopoldstr. 5, München' })).ok, true, 'owner address saved');
+eq((await mstore.read(pid, 'settings')).data.address, 'Leopoldstr. 5, München', 'owner address in settings');
+await run('set_home_address', { address: '' });
+eq((await mstore.read(pid, 'settings')).data.address, '', 'owner address can be removed');
 r = await run('add_person', { name: 'Bad', birthday: '1950-13-45' });
 eq(r.error, 'birthday must be MM-DD or YYYY-MM-DD', 'bad birthday refused');
 r = await run('propose_routine', { title: 'Office', rule: { freq: 'weekly', days: ['tu', 'th'] }, end: '17:00', fixed: true });

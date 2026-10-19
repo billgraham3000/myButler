@@ -28,7 +28,7 @@ From the session that built MyButler inside 4Muses and moved it here, to the ses
    - a reply without words lists what was saved.
 
    Watch the first long messages in the logs (`mybutler chat: no reply text` is logged if it ever happens again).
-3. **Addresses for people (decision pending):** the owner wants to store addresses. The code currently drops them on purpose (`cleanPerson` in `tools.js`, and the system prompt says "no addresses"); the design doc said "unless the owner adds them for a reason". Offered: an `address` field for people and the owner. The owner hasn't answered yet, so ask before building.
+3. **Addresses for people: done 2026-10-19.** The owner said to keep addresses for travel advice; people have an address field and the owner's home address is in Settings. Was: the owner wants to store addresses. The code currently drops them on purpose (`cleanPerson` in `tools.js`, and the system prompt says "no addresses"); the design doc said "unless the owner adds them for a reason". Offered: an `address` field for people and the owner. The owner hasn't answered yet, so ask before building.
 4. **Ticketmaster:** the owner will add `TICKETMASTER-API-KEY` to the vault later. The app setting already points there; restart the function app after the key is added. Until then the look uses web search.
 5. **Voice (phase 2), planned in `docs/mybutler.md`:** push-to-talk, with OpenAI speech-to-text and text-to-speech first.
    - **Key:** the OpenAI key is not in this vault yet; the owner adds it as `OPENAI-API-KEY`.

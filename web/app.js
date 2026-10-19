@@ -470,8 +470,8 @@
     { k: 'from', label: 'From', type: 'date' }, { k: 'until', label: 'Until', type: 'date' }, { k: 'pauseAll', label: 'Pause all routines', type: 'check' }], { kind: 'vacation', pauseAll: true }, (v) => edit('period', 'add', { title: v.title, kind: v.kind, from: v.from, until: v.until, pauses: v.pauseAll ? 'all' : 'none' })));
 
   // ---------- People ----------
-  const PERSON_FIELDS = [{ k: 'name', label: 'Name' }, { k: 'relation', label: 'Relationship' }, { k: 'birthday', label: 'Birthday (MM-DD or YYYY-MM-DD)' }, { k: 'interests', label: 'Interests (comma separated)' }, { k: 'ideas', label: 'Gift and plan ideas (comma separated)' }, { k: 'notes', label: 'Notes', type: 'textarea' }];
-  const personFrom = (v, id) => ({ id, name: v.name, relation: v.relation, birthday: v.birthday, interests: list(v.interests), ideas: list(v.ideas), notes: v.notes });
+  const PERSON_FIELDS = [{ k: 'name', label: 'Name' }, { k: 'relation', label: 'Relationship' }, { k: 'birthday', label: 'Birthday (MM-DD or YYYY-MM-DD)' }, { k: 'interests', label: 'Interests (comma separated)' }, { k: 'ideas', label: 'Gift and plan ideas (comma separated)' }, { k: 'address', label: 'Address (for visits and trips)' }, { k: 'notes', label: 'Notes', type: 'textarea' }];
+  const personFrom = (v, id) => ({ id, name: v.name, relation: v.relation, birthday: v.birthday, interests: list(v.interests), ideas: list(v.ideas), address: v.address, notes: v.notes });
   const personValues = (p) => ({ ...p, interests: (p.interests || []).join(', '), ideas: (p.ideas || []).join(', ') });
   function drawPeople() {
     const ul = $('people'); ul.innerHTML = '';
@@ -479,7 +479,7 @@
     S.people.forEach((p) => {
       const li = el('li'), w = el('span', 'what');
       w.appendChild(el('b', '', p.name + (p.relation ? ` (${p.relation})` : '')));
-      const bits = [p.birthday && `🎂 ${p.birthday}`, p.interests?.length && `likes ${p.interests.join(', ')}`, p.ideas?.length && `ideas: ${p.ideas.join(', ')}`, p.notes].filter(Boolean);
+      const bits = [p.birthday && `🎂 ${p.birthday}`, p.interests?.length && `likes ${p.interests.join(', ')}`, p.ideas?.length && `ideas: ${p.ideas.join(', ')}`, p.address && `📍 ${p.address}`, p.notes].filter(Boolean);
       if (bits.length) w.appendChild(el('div', 'small muted', bits.join(' · ')));
       const a = el('span', 'acts');
       a.append(btn('Edit', () => form('Edit person', PERSON_FIELDS, personValues(p), (v) => edit('person', 'update', personFrom(v, p.id)))), btn('✕', () => { if (confirm(`Forget ${p.name}?`)) edit('person', 'delete', { id: p.id }).then(refresh, fail); }));
@@ -569,7 +569,7 @@
     const s = S.settings;
     const st = $('sState');
     if (!st.options.length) for (const [k, v] of Object.entries(STATES)) { const o = el('option', '', v); o.value = k; st.appendChild(o); }
-    $('sHome').value = s.home?.name || ''; st.value = s.state; $('sAssumption').checked = s.assumption !== false; $('sTz').value = s.tz;
+    $('sHome').value = s.home?.name || ''; $('sAddress').value = s.address || ''; st.value = s.state; $('sAssumption').checked = s.assumption !== false; $('sTz').value = s.tz;
     $('sRadius').value = s.radiusKm; $('sAm').value = s.digest?.am || '06:00'; $('sPm').value = s.digest?.pm || '18:00'; $('sEmail').checked = s.digest?.email !== false;
     const src = $('sources'); src.innerHTML = '';
     [['Claude (conversation and the twice-daily look)', S.sources.claude], ['Events from Ticketmaster', S.sources.events, 'Off until TICKETMASTER-API-KEY is in the key vault. Web search fills in meanwhile.'],
@@ -579,7 +579,7 @@
   }
   $('settingsForm').addEventListener('submit', (ev) => {
     ev.preventDefault(); $('settingsOk').hidden = true;
-    const body = { state: $('sState').value, assumption: $('sAssumption').checked, tz: $('sTz').value.trim(), radiusKm: Number($('sRadius').value), digest: { am: $('sAm').value, pm: $('sPm').value, email: $('sEmail').checked } };
+    const body = { state: $('sState').value, assumption: $('sAssumption').checked, tz: $('sTz').value.trim(), radiusKm: Number($('sRadius').value), address: $('sAddress').value.trim(), digest: { am: $('sAm').value, pm: $('sPm').value, email: $('sEmail').checked } };
     if ($('sHome').value.trim() !== (S.settings.home?.name || '')) body.home = $('sHome').value.trim();
     api('/settings', body).then(() => { $('settingsOk').hidden = false; refresh(); }, fail);
   });

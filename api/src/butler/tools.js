@@ -86,7 +86,7 @@ function cleanEvent(x) {
   return ev;
 }
 const BIRTHDAY = /^(\d{4}-)?(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
-// Only what helps the advice. Contact details and addresses are dropped unless put in notes on purpose.
+// Only what helps the advice. Addresses are kept for travel and visits (owner decision 2026-10-19); phone numbers and emails are dropped.
 function cleanPerson(x, partial = false) {
   const p = {};
   if (!partial || has(x, 'name')) p.name = need(x.name, 'name', 60);
@@ -94,6 +94,7 @@ function cleanPerson(x, partial = false) {
   if (has(x, 'birthday') || !partial) { const b = opt(x.birthday, 10); if (b && !BIRTHDAY.test(b)) throw bad('birthday must be MM-DD or YYYY-MM-DD'); p.birthday = b; }
   if (has(x, 'interests') || !partial) p.interests = list(x.interests, 20, 60);
   if (has(x, 'ideas') || !partial) p.ideas = list(x.ideas, 20, 120);
+  if (has(x, 'address') || !partial) p.address = opt(x.address, 200);
   if (has(x, 'notes') || !partial) p.notes = opt(x.notes, 600);
   return p;
 }
@@ -179,9 +180,10 @@ export const DEFS = [
   { name: 'update_fact', description: 'Change or confirm a saved fact (by id).', input_schema: S({ id: T.string, text: T.string, topic: T.string, kind: { type: 'string', enum: ['stated', 'inferred'] }, confidence: T.number }, ['id']) },
   { name: 'delete_fact', description: 'Forget a saved fact (by id).', input_schema: S({ id: T.string }, ['id']) },
   { name: 'add_memory', description: 'Note something that happened or a lasting impression, e.g. "loved the wine fest in Wiesbaden".', input_schema: S({ text: T.string }, ['text']) },
-  { name: 'add_person', description: 'Save a friend or relative: only what helps the advice (relationship, birthday, interests, gift ideas, notes). No addresses or contact details.',
-    input_schema: S({ name: T.string, relation: T.string, birthday: { type: 'string', description: 'MM-DD, or YYYY-MM-DD if the year is known' }, interests: T.strings, ideas: { ...T.strings, description: 'gift or plan ideas' }, notes: T.string }, ['name']) },
-  { name: 'update_person', description: 'Change a saved person (by id); lists given replace the old ones.', input_schema: S({ id: T.string, name: T.string, relation: T.string, birthday: T.string, interests: T.strings, ideas: T.strings, notes: T.string }, ['id']) },
+  { name: 'add_person', description: 'Save a friend or relative: what helps the advice (relationship, birthday, interests, gift ideas, address for planning visits and trips, notes). No phone numbers or emails.',
+    input_schema: S({ name: T.string, relation: T.string, birthday: { type: 'string', description: 'MM-DD, or YYYY-MM-DD if the year is known' }, interests: T.strings, ideas: { ...T.strings, description: 'gift or plan ideas' }, address: { type: 'string', description: 'street, town, country; or just the town' }, notes: T.string }, ['name']) },
+  { name: 'update_person', description: 'Change a saved person (by id); lists given replace the old ones.', input_schema: S({ id: T.string, name: T.string, relation: T.string, birthday: T.string, interests: T.strings, ideas: T.strings, address: T.string, notes: T.string }, ['id']) },
+  { name: 'set_home_address', description: 'Save the owner\'s own home address (for travel times and trip planning). An empty string removes it.', input_schema: S({ address: T.string }, ['address']) },
   { name: 'propose_routine', description: 'Propose a new routine, or a change to one (give id). Not saved until the owner says yes: read the returned readback to the owner and ask.', input_schema: S({ id: { type: 'string', description: 'only to change an existing routine' }, ...ROUTINE }, ['title', 'rule']) },
   { name: 'propose_remove_routine', description: 'Propose removing a routine (by id). Not saved until the owner says yes.', input_schema: S({ id: T.string }, ['id']) },
   { name: 'propose_exception', description: 'Propose an exception to a routine: skip it ("no gym this week": from/until, skip true) or move it ("office Friday instead of Thursday": from = the usual date, moveTo) or other times. Not saved until the owner says yes.',
@@ -243,6 +245,10 @@ const RUN = {
       ctx.changes?.push({ person: person.name });
       return { ok: true, id };
     });
+  },
+  async set_home_address(pid, x, ctx) {
+    const address = opt(x.address, 200);
+    return store.update(pid, 'settings', (s) => { s.address = address; ctx.changes?.push({ address: address ? 'saved' : 'removed' }); return { ok: true }; });
   },
   async update_person(pid, x, ctx) {
     const person = cleanPerson(x, true);
@@ -434,6 +440,7 @@ async function settingsFrom(pid, x) {
   if (has(x, 'tz')) { try { new Intl.DateTimeFormat('en', { timeZone: x.tz }); next.tz = x.tz; } catch { throw Object.assign(new Error('Unknown time zone.'), { user: true }); } }
   if (has(x, 'state')) { if (!cal.STATES[x.state]) throw Object.assign(new Error('Unknown state.'), { user: true }); next.state = x.state; }
   if (has(x, 'assumption')) next.assumption = !!x.assumption;
+  if (has(x, 'address')) next.address = str(x.address, 200);
   if (has(x, 'radiusKm')) next.radiusKm = Math.max(5, Math.min(150, Math.round(Number(x.radiusKm) || 40)));
   if (has(x, 'home') && str(x.home, 80)) {
     const g = await sources.geocode(str(x.home, 80)).catch(() => null);

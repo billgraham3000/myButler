@@ -117,7 +117,8 @@ The owner's week is the base layer. Single appointments are the exception.
   - Read and written by the function app's managed identity, encrypted at rest by Azure.
   - Data stays in West Europe.
   - Anyone with owner rights on the Azure subscription can still open the container. That's the owner, so it's accepted.
-- **Friends and relatives:** only what helps the advice (relationship, birthday, interests, ideas). No contact details or addresses unless the owner adds them for a reason.
+- **Friends and relatives:** only what helps the advice (relationship, birthday, interests, ideas, address). No phone numbers or emails.
+- **Addresses** (owner decision 2026-10-19, "keep addresses so you can advise on travel"): people have an `address` field, and the owner's own home address is `address` in `settings.json`, set in Settings or by telling MyButler (tool `set_home_address`).
 - **History and undo:**
   - Blob versioning and soft delete are turned on for the container, so a wrong "learned" change can be rolled back.
   - Conversation files are deleted after 90 days.
