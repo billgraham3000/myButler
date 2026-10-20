@@ -32,6 +32,9 @@ nav.tabs button { padding: 9px 2px; font-size: .85rem; white-space: nowrap; }
 .sugg .fb { display: flex; flex-wrap: wrap; gap: 6px; }
 .sugg .fb button { background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font-size: .85rem; }
 .sugg .fb button[aria-pressed="true"] { background: var(--glow-soft); border-color: var(--glow); }
+.sugg.past { opacity: .85; }
+.earlier summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
+.earlier[open] summary { margin-bottom: 8px; }
 .sugg .why input { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 8px; background: var(--card); }
 
 .proposal { border: 1px dashed var(--glow); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }

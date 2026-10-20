@@ -163,17 +163,27 @@ export async function feedback(pid, id, value, note) {
 }
 
 // ---------- the Today screen ----------
+// Ideas from every look, not just the last one (owner request 2026-10-20). Current: an event whose day hasn't passed, or an
+// undated idea from the last week, not answered "not interested" or "did it", and not snoozed. Everything else from the last
+// two months is "earlier", newest first, so the owner can scroll back through past ideas and their answers.
+const RECENT_DAYS = 7, EARLIER_DAYS = 60, MAX_EARLIER = 100;
 export async function todayView(pid) {
   const settings = (await store.read(pid, 'settings')).data, now = cal.localNow(settings.tz);
   const [digest, lines, c, weather] = await Promise.all([store.read(pid, 'digest').then((x) => x.data), log(pid, now.date), context(pid, now), sources.weather(settings).catch(() => ({ days: [] }))]);
   const last = {};
   for (const l of lines) if (l.type === 'feedback') last[l.id] = l;
-  const shown = new Set((digest.suggestions || []).map((s) => s.id));
-  // "Remind me later" brings a suggestion back once its day comes.
-  const back = lines.filter((l) => l.type === 'suggestion' && !shown.has(l.id) && last[l.id]?.value === 'later' && last[l.id].until <= now.date);
-  const list = [...(digest.suggestions || []), ...back].map((s) => ({ ...s, feedback: last[s.id] ? { value: last[s.id].value, note: last[s.id].note || '', until: last[s.id].until || '' } : null }))
-    .filter((s) => !(s.feedback?.value === 'later' && s.feedback.until > now.date));
-  return { now, digest: { slot: digest.slot || null, at: digest.at || null, emailed: !!digest.emailed, keptFrom: digest.keptFrom || null }, suggestions: list, reminders: reminders(c, now, weather), weather: weather.days.slice(0, 3), today: c.week[0] };
+  const fb = (id) => last[id] ? { value: last[id].value, note: last[id].note || '', until: last[id].until || '' } : null;
+  const all = lines.filter((l) => l.type === 'suggestion').map(({ type, ...s }) => ({ ...s, feedback: fb(s.id), latest: !!digest.slot && s.slot === digest.slot }));
+  const day = (s) => (s.at ? cal.localNow(settings.tz, new Date(s.at)).date : now.date);
+  const snoozed = (s) => s.feedback?.value === 'later' && s.feedback.until > now.date;
+  const current = (s) => !['not', 'did'].includes(s.feedback?.value) && !snoozed(s) && (s.date ? s.date >= now.date : day(s) >= cal.addDays(now.date, -RECENT_DAYS));
+  const newest = (a, b) => (b.at || '').localeCompare(a.at || '') || b.score - a.score;
+  return {
+    now, digest: { slot: digest.slot || null, at: digest.at || null, emailed: !!digest.emailed },
+    suggestions: all.filter(current).sort(newest),
+    earlier: all.filter((s) => !current(s) && day(s) >= cal.addDays(now.date, -EARLIER_DAYS)).sort(newest).slice(0, MAX_EARLIER),
+    reminders: reminders(c, now, weather), weather: weather.days.slice(0, 3), today: c.week[0],
+  };
 }
 
 // ---------- the timer step ----------

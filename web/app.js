@@ -144,15 +144,23 @@
     });
 
     const d = t.digest;
-    $('digestInfo').textContent = d.at ? `From the ${new Date(d.at).getHours() < 12 ? 'morning' : 'evening'} look, ${new Date(d.at).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' })}${d.emailed ? ' (also emailed)' : ''}.` : 'The first look happens at the next 6:00 or 18:00, or tap Look now.';
+    $('digestInfo').textContent = d.at ? `Ideas from all recent looks. Latest: ${new Date(d.at).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' })}${d.emailed ? ' (also emailed)' : ''}.` : 'The first look happens at the next 6:00 or 18:00, or tap Look now.';
     const box = $('suggestions'); box.innerHTML = '';
     if (!t.suggestions.length && d.at) box.appendChild(el('p', 'muted', 'Nothing worth your time right now. That’s fine.'));
     t.suggestions.forEach((s) => box.appendChild(suggestion(s)));
+    const earlier = t.earlier || [];
+    $('earlierBox').hidden = !earlier.length; $('earlierCount').textContent = earlier.length;
+    const eb = $('earlier'); eb.innerHTML = '';
+    earlier.forEach((s) => eb.appendChild(suggestion(s, true)));
     drawTalk();
   }
-  function suggestion(s) {
-    const c = el('div', 'sugg');
-    c.appendChild(el('h3', '', `${ICON[s.kind] || '•'} ${s.title}`));
+  const ANSWER = { up: '👍', down: '👎', not: 'Not interested', later: 'Remind me later', did: 'Did it' };
+  function suggestion(s, past = false) {
+    const c = el('div', 'sugg' + (past ? ' past' : ''));
+    const h = el('h3', '', `${ICON[s.kind] || '•'} ${s.title} `);
+    if (s.latest && !past) h.appendChild(el('span', 'tag guess', 'new'));
+    c.appendChild(h);
+    if (past && s.at) c.appendChild(el('span', 'muted small', `Suggested ${nice(new Date(s.at).toLocaleDateString('en-CA'))}${s.feedback ? ` · you said: ${ANSWER[s.feedback.value] || s.feedback.value}${s.feedback.value === 'later' && s.feedback.until ? ` (back ${nice(s.feedback.until)})` : ''}` : ''}`));
     if (s.date) c.appendChild(el('span', 'when', [nice(s.date), s.time].filter(Boolean).join(' · ')));
     c.appendChild(el('p', '', s.text));
     if (s.url) { const a = el('a', 'small', s.source || 'Source'); a.href = s.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; c.appendChild(a); }

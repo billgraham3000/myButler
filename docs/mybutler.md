@@ -219,7 +219,8 @@ Blob container `mybutler`, one folder per player id (only the owner for now; kee
   - A Ticketmaster pick takes its date, time and link from Ticketmaster itself.
   - Any other event needs a link that one of that look's web searches actually returned, and a date within the next month. Anything else is dropped.
   - Nothing suggested in the last 45 days is suggested again.
-- **When nothing passes:** no email, and the last digest stays on the Today screen.
+- **When nothing passes:** no email; the ideas already on the Today screen stay there.
+- **Today's ideas come from every look, not just the last one** (owner request 2026-10-20, after an email had two ideas and the app showed one). Current ideas: an event whose day hasn't passed, or an undated idea from the last 7 days, unless answered "not interested" or "did it", or snoozed. The newest look's ideas are marked "new". Everything else from the last two months is under "Earlier ideas" (collapsed, newest first), with the date it was suggested and the answer given.
 - **The email:**
   - It holds new suggestions.
   - It also holds reminders that are new since the last digest, plus the morning's reminders due today. So an overdue chore doesn't arrive twice a day.
