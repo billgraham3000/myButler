@@ -6,7 +6,7 @@ Everything lives in the resource group **myButler** (subscription "Azure subscri
 
 | Resource | Name | What it does |
 |---|---|---|
-| Static web app (Free) | `swa-mybutler` | The page, at https://salmon-grass-0ae222003.2.azurestaticapps.net |
+| Static web app (Free) | `swa-mybutler` | The page, at https://mybutler.califa.ai (custom domain since 2026-10-21) and https://salmon-grass-0ae222003.2.azurestaticapps.net |
 | Function app (Flex Consumption, Node 22) | `func-mybutler-mbjcu1` | The API at https://func-mybutler-mbjcu1.azurewebsites.net/api, and the hourly timer |
 | Storage account | `stmbjcu1butler` | Containers `mybutler` (the owner's data), `auth` (sessions, sign-in links, passkeys), `state` (timer flags, request counters), plus the function app's own |
 | Key vault (RBAC) | `kv-mybutler-mbjcu1` | Secrets |
@@ -46,7 +46,7 @@ az functionapp restart -g myButler -n func-mybutler-mbjcu1
 | `MAIL_FROM` | The Azure-managed sender address |
 | `SITE_URL` | The web app's address, used in emailed links and for passkeys (optional `PASSKEY_RP_ID`, `PASSKEY_ORIGINS`) |
 
-CORS on the function app allows only the web app's address.
+CORS on the function app allows only the web app's two addresses: https://mybutler.califa.ai and https://salmon-grass-0ae222003.2.azurestaticapps.net. `SITE_URL` is https://mybutler.califa.ai.
 
 ## Deploying
 
@@ -62,7 +62,10 @@ The page finds the API through `web/config.js`; its security policy (`web/static
 - The Claude agent's service principal (`modular2-claude-agent`) is Owner on the group, and Key Vault Secrets Officer on the vault.
 - The owner's account is Key Vault Secrets Officer on the vault.
 
-## A custom domain later
+## Custom domain
+
+`mybutler.califa.ai` was added on 2026-10-21. The function app's CORS and `SITE_URL` were updated the same day, after sign-in failed with "No connection": the browser blocks API calls from an address CORS doesn't list, and the page reports that as no connection. For another domain:
+
 
 1. In the portal, open `swa-mybutler`, then Custom domains, then Add, and create the CNAME the portal shows at the registrar.
 2. Then update:

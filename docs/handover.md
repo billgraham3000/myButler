@@ -4,7 +4,7 @@ From the session that built MyButler inside 4Muses and moved it here, to the ses
 
 ## State today
 
-- **Live:** https://salmon-grass-0ae222003.2.azurestaticapps.net
+- **Live:** https://mybutler.califa.ai since 2026-10-21 (before: https://salmon-grass-0ae222003.2.azurestaticapps.net, which still works)
   - The API is https://func-mybutler-mbjcu1.azurewebsites.net/api.
   - `/api/health` shows `claude: true, email: true, events: false`.
 - **The owner is set up:**
