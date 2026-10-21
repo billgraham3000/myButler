@@ -139,7 +139,9 @@ Blob container `mybutler`, one folder per player id (only the owner for now; kee
 <playerId>/settings.json            time zone, state for holidays, home town, digest times, voice choice
 <playerId>/memories.jsonl           notes, appended
 <playerId>/suggestions-2026-10.jsonl  what was suggested, and the feedback, appended
-<playerId>/talk-2026-10-18.jsonl    conversation text, one file per day, deleted after 90 days
+<playerId>/topics.json              conversation topics (since 2026-10-21)
+<playerId>/topic-12.jsonl            one topic's messages; older topics are deleted 90 days after their last message
+<playerId>/talk-2026-10-18.jsonl    conversation text before topics, one file per day, deleted after 90 days
 ```
 
 - **Edited files use version checks**, as the Jar and Trade already do with `store.getJson` / `store.putJson` and ETags. If a timer run and a conversation write at the same moment, the second one re-reads and tries again, so nothing is lost.
@@ -230,6 +232,25 @@ Blob container `mybutler`, one folder per player id (only the owner for now; kee
   - A missed morning is not run after 18:00; the evening slot covers it.
   - A slot that fails three times is given up, so a broken key can't run up costs.
   - Conversation files older than 90 days are deleted in the evening slot.
+
+**Conversation topics (2026-10-21, owner request)**
+
+"Too much scrolling to get to the most current dialogue, and many topics intermingle. Have topics grouped and collapsed with an expand option and newest on top. Some stay relevant for a long time, such as an apartment search; others no longer after a weekend and should be minimized."
+
+- **Every message belongs to a topic** (`api/src/butler/topics.js`; index `topics.json`, messages `topic-<n>.jsonl`).
+- **Who picks the topic:**
+  - **Reply here** in an open topic aims the prompt bar at it: a chip "Replying in …" with ✕ shows above the text box, and that topic's last 20 messages go to Claude.
+  - Otherwise Claude calls `choose_topic` first: an existing topic, or a new one. If the newest topic had a message in the last 30 minutes, its last 10 messages go along as context. If Claude chooses nothing, the message goes to that recent topic, or to a new short topic named after the message.
+- **Lasting or short:**
+  - A topic is lasting (an apartment search, a project) or short until a date (weekend plans: the Sunday; 3 days by default).
+  - Claude sets this, and can change it or mark a topic done with `update_topic`. The owner can too, with **Keep (ongoing)** / **Make short**, **Done** and **Reopen**.
+- **On the page:**
+  - Topics are newest first and collapsed, showing their title, a tag (ongoing / until a date / done), the time, the number of messages and the start of MyButler's last answer.
+  - Tapping a topic opens it. Inside, the newest exchange comes first, with the last three exchanges shown and **Show earlier messages** for the rest.
+  - A message being answered shows on top.
+- **Older topics:** short topics past their date and topics marked done are in a collapsed "Older topics" section. A new message in a topic brings it back.
+- **Moving over:** the day-by-day conversation from before topics became one older topic per day ("Conversation, <date>") the first time the page loaded after the change.
+- **Cleanup:** older topics are deleted 90 days after their last message, in the evening slot. Open lasting topics are kept whatever their age.
 
 **Prompt bar and calendar (2026-10-19, owner request)**
 - **Prompt bar:**

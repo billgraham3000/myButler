@@ -242,7 +242,8 @@ sent.length = 0;
 r = await chat.turn(owner, 'ja, genau');
 eq((await mstore.read(pid, 'routines')).data.routines.map((x) => x.title), ['Office', 'Gym'], 'confirmed in the next message');
 eq(sent[0].messages.map((m) => m.role), ['user', 'assistant', 'user'], 'today\'s conversation goes along');
-eq((await mstore.lines(pid, 'talk-' + cal.localNow().date)).length, 4, 'conversation saved as text');
+eq((await mstore.read(pid, 'topics')).data.topics.map((t) => [t.title, t.count]), [['Ich liebe Jazz, and I go to the gym Mon/Wed/Fri…', 4]], 'without choose_topic: a new topic, and a quick follow-up stays in it');
+eq((await mstore.lines(pid, 'topic-1')).length, 4, 'conversation saved as text in its topic');
 // A reply cut off by its length limit is asked again with more room; a wordless end gets one nudge.
 replies = [
   { stop_reason: 'max_tokens', content: [{ type: 'tool_use', id: 'x1', name: 'add_person', input: { name: 'Half' } }] },
@@ -262,6 +263,50 @@ replies = [
 ];
 r = await chat.turn(owner, 'I ride.');
 eq(r.reply, 'I saved this:\n- fact: Rides horses', 'with no words at all, the reply says what was saved');
+// ---------- topics ----------
+const topicsMod = await import('../api/src/butler/topics.js');
+const today = cal.localNow().date;
+replies = [
+  { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't1', name: 'choose_topic', input: { title: 'Apartment search', lasting: true } }] },
+  { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Which districts?' }] },
+];
+sent.length = 0;
+r = await chat.turn(owner, 'I am looking for a 3-room flat.');
+eq(/TOPICS \(newest first\)[\s\S]*\[1\]/.test(sent[0].system) && sent[0].tools[0].name === 'choose_topic', true, 'Claude sees the topics and is offered choose_topic');
+let idx = (await mstore.read(pid, 'topics')).data;
+const apt = idx.topics.find((t) => t.title === 'Apartment search');
+eq([r.topic, apt.lasting, apt.count], [apt.id, true, 2], 'choose_topic starts a lasting topic');
+replies = [
+  { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't2', name: 'choose_topic', input: { title: 'Ignored' } }] },
+  { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Noted for the gym.' }] },
+];
+sent.length = 0;
+r = await chat.turn(owner, 'Make it 7 instead.', { topic: 1 });
+eq([r.topic, sent[0].messages[0].content.startsWith('Ich liebe Jazz'), /writing inside the topic \[1\]/.test(sent[0].system)], [1, true, true], 'a reply inside a topic carries that topic\'s history');
+eq((await mstore.read(pid, 'topics')).data.topics.length, 2, 'and no new topic is made');
+eq((await chat.turn(owner, 'x', { topic: 999 }).catch((e) => e.message)), 'That topic is gone.', 'unknown topic refused');
+replies = [
+  { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't3', name: 'choose_topic', input: { title: 'Weekend plans', until: cal.addDays(today, 2) } },
+    { type: 'tool_use', id: 't4', name: 'update_topic', input: { id: 1, done: true } }] },
+  { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Here are ideas.' }] },
+];
+r = await chat.turn(owner, 'What can I do this weekend?');
+idx = (await mstore.read(pid, 'topics')).data;
+eq([idx.topics.find((t) => t.id === r.topic).until, idx.topics.find((t) => t.id === 1).done], [cal.addDays(today, 2), true], 'a short topic has its date; update_topic marks one done');
+await topicsMod.change(pid, r.topic, { until: cal.addDays(today, -1) }, { date: today });
+let tv4 = await topicsMod.view(pid, 'Europe/Berlin');
+eq(tv4.map((t) => [t.title, t.active]), [['Weekend plans', false], ['Ich liebe Jazz, and I go to the gym Mon/Wed/Fri…', false], ['Apartment search', true]], 'newest first; a past short topic and a done one are older, a lasting one stays');
+await topicsMod.add(pid, 1, [{ role: 'user', text: 'one more', at: new Date().toISOString() }], { date: today });
+eq((await topicsMod.view(pid, 'Europe/Berlin'))[0].active, true, 'a new message brings a done topic back to the top, active');
+const pid2 = 'owner2';
+await mstore.append(pid2, 'talk-2026-10-01', { role: 'user', text: 'hi', at: '2026-10-01T08:00:00Z' });
+await mstore.append(pid2, 'talk-2026-10-01', { role: 'assistant', text: 'hello', at: '2026-10-01T08:00:05Z' });
+tv4 = await topicsMod.view(pid2, 'Europe/Berlin');
+eq([tv4.length, tv4[0].title, tv4[0].active, tv4[0].messages.length], [1, 'Conversation, 2026-10-01', false, 2], 'conversations from before topics become one older topic per day');
+await topicsMod.view(pid2, 'Europe/Berlin');
+eq((await mstore.lines(pid2, `topic-${tv4[0].id}`)).length, 2, 'moved only once');
+eq(await topicsMod.cleanup(pid2, cal.addDays('2026-10-01', 91)), 1, 'older topics are removed after 90 days');
+eq((await mstore.files(pid2)).includes(`topic-${tv4[0].id}`), false, 'with their messages');
 
 replies = [
   { stop_reason: 'tool_use', content: [

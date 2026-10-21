@@ -17,6 +17,7 @@ const FALLBACK = {
   goals: () => ({ goals: [] }),
   settings: () => structuredClone(DEFAULT_SETTINGS),
   digest: () => ({}),
+  topics: () => ({ next: 1, topics: [], migrated: false }),
 };
 const fallback = (file) => (FALLBACK[file] || (/^events-\d{4}-\d{2}$/.test(file) ? () => ({ events: [] }) : () => ({})))();
 
@@ -65,6 +66,8 @@ export async function lines(pid, file) {
   const text = await backend.getText(logName(pid, file));
   return (text || '').split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
 }
+// Deletes one file (a log with isLog).
+export async function remove(pid, file, isLog = false) { await backend.deleteJson(isLog ? logName(pid, file) : jsonName(pid, file)); }
 // Names of the player's files, without folder or extension, e.g. "profile", "talk-2026-10-18".
 export async function files(pid) { return (await backend.listJson(folder(pid))).map((n) => n.slice(folder(pid).length).replace(/\.jsonl?$/, '')); }
 

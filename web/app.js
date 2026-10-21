@@ -184,39 +184,102 @@
     return c;
   }
   // ---------- the conversation and the prompt bar (on every screen) ----------
-  // While MyButler answers, you can keep typing: further messages wait and go out one after another.
-  let inflight = null, started = 0, ticker = null;
-  const queue = [];
+  // Topics, newest first and collapsed; inside a topic the newest exchange comes first. "Reply here" aims the prompt
+  // bar at a topic; otherwise MyButler picks the topic. While MyButler answers, further messages wait in a queue.
+  let inflight = null, started = 0, ticker = null, target = null;
+  const queue = [], opened = new Set(), full = {}, showAll = new Set();
+  const plain = (t) => String(t || '').replace(/\*\*|\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/\s+/g, ' ').trim();
+  const ago = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); };
+  const topicById = (id) => (S?.topics || []).find((t) => t.id === id);
+  function bubble(m, extra) {
+    const b = el('div', 'msg ' + (m.role === 'assistant' ? 'assistant' : 'user') + (extra ? ' ' + extra : ''));
+    b.appendChild(m.role === 'assistant' ? md(m.text) : el('div', '', m.text));
+    const ch = (m.changes || []).map((c) => Object.entries(c).map(([k, v]) => k === 'proposal' || k === 'readback' ? null : `${k}: ${v}`).filter(Boolean).join(' ')).filter(Boolean);
+    if (ch.length) b.appendChild(el('div', 'changes', '✓ ' + ch.join(' · ')));
+    if ((m.links || []).length) { const l = el('div', 'links'); m.links.slice(0, 5).forEach((x, i) => { if (i) l.appendChild(document.createTextNode(' · ')); const a = el('a', '', x.title.slice(0, 40)); a.href = x.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; l.appendChild(a); }); b.appendChild(l); }
+    return b;
+  }
+  // Messages as exchanges (the owner's message and MyButler's answer), newest first.
+  function exchanges(msgs) {
+    const out = [];
+    for (const m of msgs) { if (m.role === 'user' || !out.length) out.push([m]); else out[out.length - 1].push(m); }
+    return out.reverse();
+  }
+  function lifeTag(t) {
+    if (t.done) return el('span', 'tag', 'done');
+    if (t.lasting) return el('span', 'tag guess', 'ongoing');
+    return el('span', 'tag', t.active ? `until ${nice(t.until)}` : nice(t.until));
+  }
+  function topicCard(t) {
+    const open = opened.has(t.id), c = el('div', 'topic' + (open ? ' open' : '') + (target === t.id ? ' target' : ''));
+    const head = el('button', 'thead'); head.type = 'button'; head.setAttribute('aria-expanded', String(open));
+    const top = el('span', 'tline');
+    top.append(el('b', '', t.title), lifeTag(t));
+    head.append(top, el('span', 'muted small', `${ago(t.lastAt)} · ${t.total || t.count || 0} messages`));
+    const lastAnswer = [...(t.messages || [])].reverse().find((m) => m.role === 'assistant');
+    if (!open && lastAnswer) head.appendChild(el('span', 'preview', plain(lastAnswer.text).slice(0, 140)));
+    head.addEventListener('click', () => { if (open) opened.delete(t.id); else opened.add(t.id); drawTalk(); });
+    c.appendChild(head);
+    if (!open) return c;
+    const acts = el('div', 'tacts');
+    acts.appendChild(btn(target === t.id ? 'Replying here ✓' : 'Reply here', () => { target = target === t.id ? null : t.id; drawTarget(); drawTalk(); if (target) $('ask').focus(); }, 'btn small' + (target === t.id ? '' : ' ghost')));
+    const set = (x) => api('/topic-edit', { id: t.id, ...x }).then(refresh, fail);
+    if (!t.done) acts.appendChild(btn(t.lasting ? 'Make short' : 'Keep (ongoing)', () => set({ lasting: !t.lasting }), 'btn ghost small'));
+    acts.appendChild(t.done || !t.active ? btn('Reopen', () => set({ done: false, ...(t.lasting ? {} : { until: addDays(S.today.now.date, 3) }) }), 'btn ghost small') : btn('Done', () => set({ done: true }), 'btn ghost small'));
+    c.appendChild(acts);
+    const msgs = full[t.id] || t.messages || [], ex = exchanges(msgs), all = showAll.has(t.id);
+    const list = el('div', 'talk');
+    (all ? ex : ex.slice(0, 3)).forEach((pair) => { const g = el('div', 'exchange'); pair.forEach((m) => g.appendChild(bubble(m))); list.appendChild(g); });
+    c.appendChild(list);
+    const more = (t.total || 0) > msgs.length || ex.length > 3;
+    if (more && !all) c.appendChild(btn('Show earlier messages', () => {
+      showAll.add(t.id);
+      if ((t.total || 0) > msgs.length) api(`/topic?id=${t.id}`).then((d) => { full[t.id] = d.messages; drawTalk(); }, fail); else drawTalk();
+    }, 'btn ghost small'));
+    return c;
+  }
+  function drawTarget() {
+    const t = target != null ? topicById(target) : null;
+    if (target != null && !t) target = null;
+    $('target').hidden = !t; $('targetName').textContent = t ? t.title : '';
+    $('ask').placeholder = t ? `Reply in “${t.title}”…` : 'Tell me something, or ask…';
+  }
   function drawTalk() {
     const box = $('talk'); box.innerHTML = '';
-    if (!S.talk.length && !inflight) box.appendChild(el('p', 'muted small', 'Tell me about your week, the people you care about, what you like or want to achieve. Or ask: “Was kann ich am Samstag machen?”'));
-    const bubble = (m, extra) => {
-      const b = el('div', 'msg ' + (m.role === 'assistant' ? 'assistant' : 'user') + (extra ? ' ' + extra : ''));
-      b.appendChild(m.role === 'assistant' ? md(m.text) : el('div', '', m.text));
-      const ch = (m.changes || []).map((c) => Object.entries(c).map(([k, v]) => k === 'proposal' || k === 'readback' ? null : `${k}: ${v}`).filter(Boolean).join(' ')).filter(Boolean);
-      if (ch.length) b.appendChild(el('div', 'changes', '✓ ' + ch.join(' · ')));
-      if ((m.links || []).length) { const l = el('div', 'links'); m.links.slice(0, 5).forEach((x, i) => { if (i) l.appendChild(document.createTextNode(' · ')); const a = el('a', '', x.title.slice(0, 40)); a.href = x.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; l.appendChild(a); }); b.appendChild(l); }
-      box.appendChild(b); return b;
-    };
-    S.talk.forEach((m) => bubble(m));
-    if (inflight) {
-      const last = S.talk[S.talk.length - 1];
-      if (!last || last.role !== 'user' || last.text !== inflight) bubble({ role: 'user', text: inflight });
-      const t = bubble({ role: 'assistant', text: '' }, 'thinking'); t.id = 'thinking';
-      t.textContent = `MyButler is thinking… ${Math.round((Date.now() - started) / 1000)} s`;
+    const topics = S.topics || [];
+    if (!topics.length && !inflight) box.appendChild(el('p', 'muted small', 'Tell me about your week, the people you care about, what you like or want to achieve. Or ask: “Was kann ich am Samstag machen?”'));
+    if (inflight || queue.length) {
+      const p = el('div', 'topic open pending');
+      if (inflight) {
+        const where = inflight.topic != null ? topicById(inflight.topic)?.title : null;
+        p.appendChild(el('span', 'muted small', where ? `In “${where}”` : 'New message: MyButler picks the topic'));
+        p.appendChild(bubble({ role: 'user', text: inflight.text }));
+        const t = bubble({ role: 'assistant', text: '' }, 'thinking'); t.id = 'thinking';
+        t.textContent = `MyButler is thinking… ${Math.round((Date.now() - started) / 1000)} s`; p.appendChild(t);
+      }
+      queue.forEach((q) => { const b = bubble({ role: 'user', text: q.text }, 'queued'); b.appendChild(el('div', 'changes', 'waiting to send')); p.appendChild(b); });
+      box.appendChild(p);
     }
-    queue.forEach((q) => { const b = bubble({ role: 'user', text: q }, 'queued'); b.appendChild(el('div', 'changes', 'waiting to send')); });
-    box.scrollTop = box.scrollHeight;
+    topics.filter((t) => t.active).forEach((t) => box.appendChild(topicCard(t)));
+    const older = topics.filter((t) => !t.active);
+    if (older.length) {
+      const d = el('details', 'earlier oldtopics'); d.open = drawTalk.olderOpen || false;
+      d.addEventListener('toggle', () => { drawTalk.olderOpen = d.open; });
+      d.appendChild(el('summary', '', `Older topics (${older.length})`));
+      const inner = el('div', 'stack'); older.forEach((t) => inner.appendChild(topicCard(t))); d.appendChild(inner);
+      box.appendChild(d);
+    }
+    drawTarget();
   }
-  function send(text) {
-    inflight = text; started = Date.now(); err('');
+  function send(item) {
+    inflight = item; started = Date.now(); err('');
     clearInterval(ticker);
     ticker = setInterval(() => { const t = $('thinking'); if (t) t.textContent = `MyButler is thinking… ${Math.round((Date.now() - started) / 1000)} s`; }, 1000);
     drawTalk(); sendLabel();
-    api('/chat', { text }, null, 180000).then(() => { inflight = null; return refresh(); }, (e) => {
+    api('/chat', { text: item.text, topic: item.topic }, null, 180000).then((d) => { inflight = null; if (d.topic != null) { opened.add(d.topic); delete full[d.topic]; } return refresh(); }, (e) => {
       inflight = null;
       // Put the text back so nothing typed is lost (with any messages still waiting).
-      const back = [text, ...queue.splice(0)].join('\n\n');
+      const back = [item.text, ...queue.splice(0).map((q) => q.text)].join('\n\n');
       $('ask').value = back + ($('ask').value ? '\n\n' + $('ask').value : ''); grow();
       fail(e.timeout ? e : new Error(e.message)); drawTalk();
     }).finally(() => {
@@ -227,14 +290,16 @@
   function sendLabel() { $('askBtn').textContent = inflight ? 'Queue' : 'Send'; }
   function grow() { const a = $('ask'); a.style.height = 'auto'; a.style.height = Math.min(a.scrollHeight, 180) + 'px'; }
   $('ask').addEventListener('input', grow);
+  $('targetClear').addEventListener('click', () => { target = null; drawTarget(); drawTalk(); });
   $('askForm').addEventListener('submit', (ev) => {
     ev.preventDefault();
     const text = $('ask').value.trim();
     if (!text || !S) return;
     $('ask').value = ''; grow();
     if ($('tab-today').hidden) tab('today');
-    if (inflight) { queue.push(text); drawTalk(); } else send(text);
-    setTimeout(() => $('chatCard').scrollIntoView({ behavior: 'smooth', block: 'end' }), 50);
+    const item = { text, topic: target };
+    if (inflight) { queue.push(item); drawTalk(); } else send(item);
+    setTimeout(() => $('chatCard').scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   });
   $('ask').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) $('askForm').requestSubmit(); });
   $('lookNow').addEventListener('click', () => {

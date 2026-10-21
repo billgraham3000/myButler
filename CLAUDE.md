@@ -24,6 +24,7 @@ A private personal advisor for one person, its owner (Munich, Bavaria). It learn
     - `calendar.js`: plain rules, tested;
     - `tools.js`: the AI's tools and the page's edits, with input checks;
     - `chat.js`: one conversation turn, and the tool loop;
+    - `topics.js`: conversation topics (lasting or short, newest first);
     - `scan.js`: the twice-daily look, the digest email and feedback;
     - `sources.js`: Ticketmaster, Open-Meteo;
     - `store.js`: the owner's files.

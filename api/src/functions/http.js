@@ -9,6 +9,7 @@ import { hasKey } from '../lib/claude.js';
 import * as butlerStore from '../butler/store.js';
 import * as butlerTools from '../butler/tools.js';
 import * as butlerChat from '../butler/chat.js';
+import * as butlerTopics from '../butler/topics.js';
 import * as butlerScan from '../butler/scan.js';
 import * as butlerSources from '../butler/sources.js';
 import { localNow } from '../butler/calendar.js';
@@ -83,16 +84,22 @@ route('state', ['GET'], async ({ owner, settings }) => {
   const pid = owner.id;
   const [profile, people, routines, chores, goals, today, talk] = await Promise.all([
     butlerStore.read(pid, 'profile'), butlerStore.read(pid, 'people'), butlerStore.read(pid, 'routines'), butlerStore.read(pid, 'chores'), butlerStore.read(pid, 'goals'),
-    butlerScan.todayView(pid), butlerChat.talkToday(pid, settings.tz)]);
+    butlerScan.todayView(pid), butlerTopics.view(pid, settings.tz)]);
   const memories = (await butlerStore.lines(pid, 'memories')).slice(-200);
-  return json(200, { settings, profile: profile.data, people: people.data.people, routines: routines.data, chores: chores.data.chores, goals: goals.data.goals, memories, today, talk,
+  return json(200, { settings, profile: profile.data, people: people.data.people, routines: routines.data, chores: chores.data.chores, goals: goals.data.goals, memories, today, topics: talk,
     sources: { claude: hasKey(), events: butlerSources.eventsOn(), email: canSendMail() } });
 });
 route('week', ['GET'], async ({ owner, q, now }) => {
   const from = /^\d{4}-\d{2}-\d{2}$/.test(q('from') || '') ? q('from') : now.date;
   return json(200, { from, days: await butlerTools.week(owner.id, from, Math.max(1, Math.min(42, Number(q('days')) || 7))) });
 });
-route('chat', ['POST'], async ({ owner, body, ctx }) => json(200, await butlerChat.turn(owner, body.text, (t) => ctx.warn(t))));
+route('chat', ['POST'], async ({ owner, body, ctx }) => json(200, await butlerChat.turn(owner, body.text, { topic: body.topic, log: (t) => ctx.warn(t) })));
+route('topic', ['GET'], async ({ owner, q }) => {
+  const t = butlerTopics.find(await butlerTopics.index(owner.id), q('id'));
+  if (!t) return json(404, { error: 'That topic is gone.' });
+  return json(200, { topic: t, messages: (await butlerTopics.messages(owner.id, t.id)).slice(-200) });
+});
+route('topic-edit', ['POST'], async ({ owner, body, now }) => json(200, await butlerTopics.change(owner.id, body.id, { title: body.title, lasting: body.lasting, until: body.until, done: body.done }, now)));
 // A look on demand shows in the app; it emails only when asked to.
 route('scan', ['POST'], async ({ owner, ctx, body }) => json(200, await butlerScan.scan(owner, { log: (t) => ctx.warn(t), email: body.email === true })));
 route('confirm', ['POST'], async ({ owner, body }) => json(200, await butlerTools.decide(owner.id, String(body.id || ''), body.yes === true)));

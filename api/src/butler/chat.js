@@ -4,6 +4,7 @@ import { claudeTools } from '../lib/claude.js';
 import * as store from './store.js';
 import * as cal from './calendar.js';
 import * as tools from './tools.js';
+import * as topics from './topics.js';
 
 // The Claude model is the app setting BUTLER_MODEL (a strong one: advice quality matters more than cost here).
 const models = () => [process.env.BUTLER_MODEL];
@@ -116,7 +117,7 @@ function history(talk) {
 }
 
 const STATE_NAMES = cal.STATES;
-function system(now, settings) {
+function system(now, settings, extra = '') {
   const day = { mo: 'Monday', tu: 'Tuesday', we: 'Wednesday', th: 'Thursday', fr: 'Friday', sa: 'Saturday', su: 'Sunday' }[cal.weekday(now.date)];
   return `You are MyButler, the private personal advisor of one person, the owner. You get to know them (tastes, friends and relatives, hobbies, their normal week) and help them plan: events worth going to, birthdays, chores, free weekends, the weather.
 Now: ${day} ${now.date}, ${now.time} (${settings.tz}). Home: ${settings.home?.name || 'Munich'}, ${STATE_NAMES[settings.state] || 'Bavaria'}, Germany.${settings.address ? ` Home address: ${settings.address}.` : ''}
@@ -132,24 +133,50 @@ How to work:
 - Never suggest anything over a fixed plan. Flexible routines may be moved or skipped.
 - Dates are YYYY-MM-DD and times HH:MM (24 h) on the owner's clock. Ids are in [brackets] below; use them with the tools.
 - Your reply is shown on a phone: plain text with simple Markdown (bold, lists, links), no tables.
-
+- Conversation topics: call choose_topic first, once per message. When a matter is settled, update_topic with done; when a short topic turns out to be ongoing, make it lasting.
+${extra ? `\n${extra}\n` : ''}
 What you know about the owner:
 `;
 }
 
-export async function turn(player, text, log = () => {}) {
+// One message. With a topic (the owner replied inside one), that topic's history goes along. Without, Claude picks the
+// topic (choose_topic); if the newest topic was active in the last 30 minutes its history goes along too.
+const FOLLOW_MS = 30 * 60000;
+const shortTitle = (m) => { const l = m.split('\n')[0].trim(); return l.length <= 50 ? l : `${l.slice(0, 48).replace(/\s+\S*$/, '')}…`; };
+export async function turn(player, text, opts = {}) {
+  if (typeof opts === 'function') opts = { log: opts };
+  const log = opts.log || (() => {});
   const pid = player.id, msg = String(text || '').trim().slice(0, 6000);
   if (!msg) throw err('Please type a message.');
   const settings = (await store.read(pid, 'settings')).data, now = cal.localNow(settings.tz);
-  const at = Date.now(), file = `talk-${now.date}`;
-  const talk = [...(await store.lines(pid, `talk-${cal.addDays(now.date, -1)}`)).slice(-8), ...(await store.lines(pid, file))].slice(-20);
-  await store.append(pid, file, { role: 'user', text: msg, at: new Date(at).toISOString() });
+  const at = Date.now();
+  const idx = await topics.index(pid);
+  const given = opts.topic != null && opts.topic !== '' ? topics.find(idx, opts.topic) : null;
+  if (opts.topic != null && opts.topic !== '' && !given) throw err('That topic is gone.', 404);
+  const newest = [...idx.topics].sort((a, b) => (b.lastAt || '').localeCompare(a.lastAt || ''))[0];
+  const follow = given || (newest && at - Date.parse(newest.lastAt) < FOLLOW_MS && topics.isActive(newest, now.date) ? newest : null);
+  const talk = follow ? (await topics.messages(pid, follow.id)).slice(given ? -20 : -10) : [];
   const c = await context(pid, now);
   const ctx = { pid, turn: at, now, changes: [], sourced: new Map() };
+  let chosen = given;
+  const onTool = async (n, input) => {
+    if (n === 'choose_topic') {
+      if (given) return { ok: true, id: given.id, note: 'The owner wrote inside this topic.' };
+      const x = input || {};
+      const old = x.id != null ? topics.find(await topics.index(pid), x.id) : null;
+      try { chosen = old || await topics.create(pid, { title: x.title, lasting: x.lasting, until: x.until }, now); } catch (e) { if (e.bad) return { error: e.message }; throw e; }
+      return { ok: true, id: chosen.id };
+    }
+    if (n === 'update_topic') { try { return await topics.change(pid, input?.id, input || {}, now); } catch (e) { if (e.bad) return { error: e.message }; throw e; } }
+    return tools.run(n, input, ctx);
+  };
+  const where = given ? `\nThe owner is writing inside the topic [${given.id}] "${given.title}"; the conversation below is that topic's.`
+    : follow ? `\nThe conversation below is from the newest topic [${follow.id}] "${follow.title}"; the new message may or may not belong to it.` : '';
   const messages = [...history(talk), { role: 'user', content: msg }];
   let r;
   try {
-    r = await converse({ system: system(now, settings) + profileText(c), messages, tools: [...tools.DEFS, webSearch(settings, 3)], onTool: (n, input) => tools.run(n, input, ctx) });
+    r = await converse({ system: system(now, settings, topics.text(await topics.index(pid), now.date) + where) + profileText(c), messages,
+      tools: [...topics.DEFS, ...tools.DEFS, webSearch(settings, 3)], onTool });
   } catch (e) {
     if (e.code === 'not_configured') throw err('MyButler needs the Claude key in the key vault.', 503);
     throw e;
@@ -159,11 +186,8 @@ export async function turn(player, text, log = () => {}) {
   const done = ctx.changes.map((ch) => Object.entries(ch).filter(([k]) => k !== 'proposal').map(([k, v]) => `${k === 'readback' ? 'to confirm' : k}: ${v}`).join('')).filter(Boolean);
   const reply = r.text || (done.length ? `I saved this:\n${done.map((d) => `- ${d}`).join('\n')}` : 'Sorry, I couldn’t finish that. Please send it again.');
   const links = [...r.urls].slice(0, 10).map(([url, title]) => ({ url, title }));
-  await store.append(pid, file, { role: 'assistant', text: reply, at: new Date().toISOString(), changes: ctx.changes, links });
-  return { reply, changes: ctx.changes, links, proposals: (await store.read(pid, 'routines')).data.proposals };
-}
-
-export async function talkToday(pid, tz) {
-  const now = cal.localNow(tz);
-  return (await store.lines(pid, `talk-${now.date}`)).slice(-40);
+  // No topic chosen: the followed topic, or a new short one named after the message.
+  if (!chosen) chosen = follow || await topics.create(pid, { title: shortTitle(msg) }, now);
+  await topics.add(pid, chosen.id, [{ role: 'user', text: msg, at: new Date(at).toISOString() }, { role: 'assistant', text: reply, at: new Date().toISOString(), changes: ctx.changes, links }], now);
+  return { reply, topic: chosen.id, changes: ctx.changes, links, proposals: (await store.read(pid, 'routines')).data.proposals };
 }

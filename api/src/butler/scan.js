@@ -6,6 +6,7 @@ import * as base from '../lib/store.js';
 import { sendMail, canSendMail } from '../lib/mail.js';
 import { owner } from '../lib/owner.js';
 import * as store from './store.js';
+import * as topics from './topics.js';
 import * as cal from './calendar.js';
 import * as sources from './sources.js';
 import { context, reminders, profileText, converse, webSearch } from './chat.js';
@@ -200,7 +201,7 @@ export async function timerStep(say = () => {}) {
   try {
     const r = await scan(p, { slot: `${date}-${which}`, log: say });
     await base.setFlag(key, new Date().toISOString());
-    if (which === 'pm') { const n = await store.cleanTalk(p.id, now.date); if (n) r.removedTalk = n; }
+    if (which === 'pm') { const n = await store.cleanTalk(p.id, now.date); if (n) r.removedTalk = n; const t = await topics.cleanup(p.id, now.date); if (t) r.removedTopics = t; }
     return r;
   } catch (e) {
     const tries = Number(await base.getFlag(`${key}:tries`) || 0) + 1;
